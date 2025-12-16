@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: credit-risk-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models # Mount models so we can update them without rebuilding

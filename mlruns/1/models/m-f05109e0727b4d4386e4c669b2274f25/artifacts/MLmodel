@@ -1,0 +1,22 @@
+artifact_path: /Users/mac/Documents/kaim/credit-risk-model/mlruns/1/models/m-f05109e0727b4d4386e4c669b2274f25/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.13.5
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.8.0
+mlflow_version: 3.7.0
+model_id: m-f05109e0727b4d4386e4c669b2274f25
+model_size_bytes: 274793
+model_uuid: m-f05109e0727b4d4386e4c669b2274f25
+prompts: null
+run_id: 3f0515017f7845478f680fd0ccf46922
+utc_time_created: '2025-12-16 18:15:46.972536'
