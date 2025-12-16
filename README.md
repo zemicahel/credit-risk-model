@@ -8,7 +8,7 @@ A comprehensive credit scoring model built to meet Basel II regulatory standards
 credit-risk-model/
 ├── .github/workflows/   # CI/CD pipelines
 ├── data/                # Data storage (ignored by git)
-│   ├── raw/             # Raw dataset
+│   ├── raw/             # Raw dataset (data.csv)
 │   └── processed/       # Cleaned data for modeling
 ├── notebooks/           # Jupyter Notebooks
 │   └── eda.ipynb        # Task 2: Exploratory Data Analysis
@@ -16,10 +16,12 @@ credit-risk-model/
 │   ├── loader.py        # Data loading and type conversion
 │   └── visualize.py     # Plotting logic for EDA
 ├── src/                 # Application Source Code (Task 3+)
-│   ├── data_processing.py
-│   ├── train.py
-│   ├── predict.py
+│   ├── __init__.py
+│   ├── data_processing.py # Feature Engineering & Proxy Labeling
+│   ├── train.py           # Model Training & MLflow Tracking
 │   └── api/
+│       ├── main.py        # FastAPI Application
+│       └── pydantic_models.py
 ├── tests/               # Unit tests
 ├── Dockerfile           # Containerization setup
 ├── docker-compose.yml   # Docker services
@@ -40,13 +42,10 @@ While this provides capital efficiency, it introduces a strict burden of proof. 
 Under Pillar 2 (Supervisory Review), regulators generally will not approve "black box" models (e.g., unconstrained neural networks).
 
 2.1 Interpretability as a Regulatory Expectation
-
 Models must exhibit monotonicity and economic intuition.
-
 Example: If a borrower’s debt-to-income ratio increases, the model must demonstrate a corresponding increase in PD. If this cannot be explained, the model fails to align with basic economic reasoning.
 
 2.2 Documentation as an Audit Trail
-
 Banks must provide a "trail of evidence" explaining:
 
 Why variables were selected or excluded.
@@ -64,8 +63,8 @@ Implications for Interpretability: Credit officers and senior management must tr
 Implications for Documentation: Operational use requires clear documentation of override policies. If exceptions occur without documented governance, regulators may conclude the model is not genuinely embedded in the business.
 
 4. Independent Model Validation & Stress Testing
-4.1 Independent Validation
 
+4.1 Independent Validation
 Basel II requires validation by a team independent of the developers. Documentation acts as the "Instruction Manual" allowing validators to:
 
 Replicate the model.
@@ -75,7 +74,6 @@ Stress-test assumptions.
 Detect overfitting and spurious correlations.
 
 4.2 Stress Testing (Pillar 2)
-
 To simulate macroeconomic shocks (e.g., a rise in unemployment), banks must understand how specific drivers flow through the model equation. Opaque models make defensible scenario analysis impossible.
 
 5. Pillar 3: Market Discipline
@@ -108,7 +106,7 @@ Proxy too soft (e.g., 30 DPD): High false positives → Rejecting profitable cus
 
 Proxy too hard (e.g., Write-off only): High false negatives → Underestimating risk & capital shortfalls.
 
-Learned Bias: If default is defined by internal policy (e.g., "Refer to Collections"), the model learns the policy, not the risk. (e.g., "VIPs never default" because VIPs are never sent to collections).
+Learned Bias: If default is defined by internal policy (e.g., "Refer to Collections"), the model learns the policy, not the risk.
 
 The Cure Rate Trap: Borrowers who trigger the proxy but return to good standing ("cure") can distort LGD estimates if treated as total losses.
 
@@ -134,7 +132,7 @@ Regulatory Constraints
 
 Monotonicity: WoE enforces this by design. GBMs require constraints to prevent non-intuitive "jagged" risk surfaces.
 
-Adverse Action: Scorecards easily explain denials to customers (e.g., "High DTI"). GBMs require complex computational attribution (e.g., SHAP) for every decision.
+Adverse Action: Scorecards easily explain denials to customers (e.g., "High DTI"). GBMs require complex computational attribution (e.g., SHAP).
 
 Stability
 
@@ -142,14 +140,7 @@ LR w/ WoE: Coarse binning loses information but gains stability and graceful deg
 
 GBM: Prone to overfitting noise; can be fragile on Out-of-Time (OOT) data without rigorous regularization.
 
-Deployment
-
-LR w/ WoE: SQL or lookup tables; low latency.
-
-GBM: Requires specialized scoring engines/runtimes; higher IT overhead.
-
 Industry Standard: The Strategic Compromise
-
 Most banks adopt a Hybrid Approach:
 
 Logistic Regression is used for Regulatory Capital and Loan Origination (Compliance & Explainability).
@@ -173,7 +164,6 @@ Correlation Analysis: Identified relationships between variables (e.g., Amount v
 Missing Values & Outliers: Detected data quality issues requiring imputation or capping.
 
 Modularization
-
 To ensure code quality and reproducibility, the EDA logic was abstracted from the notebook into reusable scripts:
 
 scripts/loader.py: Handles data ingestion and datetime conversion.
@@ -182,34 +172,100 @@ scripts/visualize.py: Contains functions for plotting distributions, correlation
 
 The findings from this analysis will drive the Feature Engineering phase in Task 3.
 
+⚙️ Task 3: Feature Engineering
+
+We implemented a robust Scikit-Learn pipeline to transform raw transaction data into model-ready features.
+
+Aggregation: Raw transactions are aggregated to the Customer level (e.g., Total Amount, Average Transaction Hour).
+
+Weight of Evidence (WoE): Categorical variables (ProductCategory, Channel) are encoded using WoE to handle high cardinality and enforce monotonicity.
+
+Scaling: Numerical features are standardized using StandardScaler.
+
+Imputation: Missing values are handled via Median imputation for numbers and Mode imputation for categories.
+
+🎯 Task 4: Proxy Target Engineering
+
+Since the dataset lacked a direct "Default" label, we engineered a proxy target variable based on customer behavior:
+
+RFM Analysis: We calculated Recency, Frequency, and Monetary value for each customer.
+
+Clustering: Used K-Means clustering to segment users into 3 groups based on RFM scores.
+
+Risk Labeling: The cluster with the lowest engagement (High Recency, Low Frequency/Monetary) was labeled as High Risk (1), while others were labeled Low Risk (0).
+
+🚀 Task 5 & 6: Model Training & Deployment
+Training Pipeline
+
+Models: Logistic Regression and Random Forest.
+
+Tracking: All experiments are logged to MLflow (metrics, parameters, and artifacts).
+
+Optimization: Hyperparameters are tuned using GridSearchCV.
+
+Selection: The model with the highest ROC-AUC is automatically selected and saved.
+
+API Deployment
+
+A FastAPI service serves the trained model:
+
+Endpoint: /predict accepts customer features and returns default probability.
+
+Containerization: The application is Dockerized for consistent deployment.
+
+CI/CD: GitHub Actions pipeline ensures code quality (flake8) and runs unit tests (pytest) on every push.
+
+💻 How to Run
+1. Setup Environment
+code
+Bash
+download
+content_copy
+expand_less
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+2. Run Tests
+code
+Bash
+download
+content_copy
+expand_less
+# Add src to path and run tests
+export PYTHONPATH=$PYTHONPATH:.
+pytest tests/
+3. Train Model
+
+This will process data/raw/data.csv, train models, log to MLflow, and save the best model to models/best_model.pkl.
+
+code
+Bash
+download
+content_copy
+expand_less
+python -m src.train
+4. Start API
+code
+Bash
+download
+content_copy
+expand_less
+uvicorn src.api.main:app --reload
+
+Access documentation at: http://127.0.0.1:8000/docs
+
+5. Run with Docker
+code
+Bash
+download
+content_copy
+expand_less
+docker-compose up --build
 code
 Code
 download
 content_copy
 expand_less
----
-
-### 2. Git Commands to Update and Push
-
-Since you are currently working on `task-2` (EDA) but want the README to reflect the structure of the *entire* project, you should commit this change to the `task-2` branch.
-
-Run the following commands in your terminal:
-
-```bash
-# 1. Ensure you are on the task-2 branch
-git checkout task-2
-
-# 2. Add the updated README
-git add README.md
-
-# 3. Add the scripts and notebooks (if not already added)
-git add scripts/ notebooks/
-
-# 4. Commit the changes
-git commit -m "Docs: Update README with Business Understanding, EDA details, and Project Structure"
-
-# 5. Push to remote task-2 branch
-git push origin task-2
-Result on GitHub
-
-Branch task-2: Will show the scripts/, notebooks/, and the fully updated README.md.
